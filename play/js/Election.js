@@ -203,7 +203,7 @@ Election.borda = function(model, options){
 
 };
 
-Election.irv = function(model, options){
+function runIrv(model, options) {
 
 	var text = "";
 	text += "<span class='small'>";
@@ -266,7 +266,94 @@ Election.irv = function(model, options){
 
 		// And repeat!
 		roundNum++;
-	
+
+	}
+
+	return {
+		text: text,
+		model: model,
+		finalWinner: finalWinner
+	}
+
+}
+
+Election.irv = function(model, options){
+
+	var results = runIrv(model, options);
+
+	var color = _colorWinner(results.model, results.finalWinner);
+	results.text += "</span>";
+	results.text += "<br>";
+	results.text += "<b style='color:"+color+"'>"+results.finalWinner.toUpperCase()+"</b> WINS";
+	results.model.caption.innerHTML = results.text;
+
+};
+
+
+Election.powerIrv = function(model, options){
+
+	var text = "";
+	text += "<span class='small'>";
+
+	var finalWinner = null;
+	var roundNum = 1;
+
+	var candidates = [];
+	for(var i=0; i<model.candidates.length; i++){
+		candidates.push(model.candidates[i].id);
+	}
+
+	while(!finalWinner){
+
+		text += "<b>round "+roundNum+":</b><br>";
+		text += "who's voters' #1 choice?<br>";
+
+		// Tally the approvals & get winner!
+		var pre_tally = _tally(model, function(tally, ballot){
+			var first = ballot.rank[0]; // just count #1
+			tally[first]++;
+		});
+
+		// ONLY tally the remaining candidates...
+		var tally = {};
+		for(var i=0; i<candidates.length; i++){
+			var cID = candidates[i];
+			tally[cID] = pre_tally[cID];
+		}
+
+		// Say 'em...
+		for(var i=0; i<candidates.length; i++){
+			var c = candidates[i];
+			text += _icon(c)+":"+tally[c];
+			if(i<candidates.length-1) text+=", ";
+		}
+		text += "<br>";
+
+		// Do they have more than 50%?
+		var winner = _countWinner(tally);
+		var ratio = tally[winner]/model.getTotalVoters();
+		if(ratio>=0.5){
+			finalWinner = winner;
+			text += _icon(winner)+" has more than 50%<br>";
+			break;
+		}
+
+		// Otherwise... runoff...
+		var loser = _countLoser(tally);
+		text += "nobody's more than 50%. ";
+		text += "eliminate loser, "+_icon(loser)+". next round!<br><br>";
+
+		// ACTUALLY ELIMINATE
+		candidates.splice(candidates.indexOf(loser), 1); // remove from candidates...
+		var ballots = model.getBallots();
+		for(var i=0; i<ballots.length; i++){
+			var rank = ballots[i].rank;
+			rank.splice(rank.indexOf(loser), 1); // REMOVE THE LOSER
+		}
+
+		// And repeat!
+		roundNum++;
+
 	}
 
 	// END!
