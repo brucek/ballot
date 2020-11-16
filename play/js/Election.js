@@ -203,12 +203,151 @@ Election.borda = function(model, options){
 
 };
 
+function powerIrvCondorcet(model, options, candidates=[]){
+
+	var text = "";
+	text += "<span class='small'>";
+	text += "<b>who wins each one-on-one?</b><br>";
+
+	var ballots = model.getBallots();
+
+	console.log(ballots);
+	console.log(candidates);
+	console.log(model.candidatesById);
+
+	// Create the WIN tally
+	var tally = {};
+	if (!candidates) candidates = Object.keys(model.candidatesById);
+
+	console.log(candidates);
+
+	for(var candidateID of candidates) {
+		tally[candidateID] = {};
+		for(var opponentID of candidates) {
+			console.log("Setting " + candidateID + " and " + opponentID);
+			console.log(tally);
+			if (candidateID == opponentID) continue;
+			tally[candidateID][opponentID] = 0;
+		}
+	}
+
+	console.log("Tally setup:");
+	console.log(tally);
+
+	var topCount = 0;
+	var topWinner = {};
+
+	console.log("Ballots:");
+	console.log(ballots);
+
+	// For each combination... who's the better ranking?
+	for(var i=0; i<candidates.length-1; i++){
+		var a = candidates[i];
+		for(var j=i+1; j<candidates.length; j++){
+			var b = candidates[j];
+
+			// Actually figure out who won.
+			var aWins = 0;
+			var bWins = 0;
+			for(var k=0; k<ballots.length; k++){
+				console.log(JSON.stringify(ballots[k]));
+				var rank = ballots[k].rank;
+				if(rank.indexOf(a)<rank.indexOf(b)){
+					aWins++; // a wins!
+				}else{
+					bWins++; // b wins!
+				}
+			}
+
+			// Set the tallys
+
+			console.log("Setting tally:");
+			console.log("[" + a + "][" + b + "]: " + aWins);
+			console.log("[" + b + "][" + a + "]: " + bWins);
+
+			tally[a][b] = aWins;
+			tally[b][a] = bWins;
+
+			// WINNER?
+			var winner = (aWins>bWins) ? a : b;
+
+			// Text.
+			var by,to;
+			if(winner==a){
+				by = aWins;
+				to = bWins;
+			}else{
+				by = bWins;
+				to = aWins;
+			}
+			text += _icon(a)+" vs "+_icon(b)+": "+_icon(winner)+" wins by "+by+" to "+to+"<br>";
+
+			// New top winner (or tie)?
+			if (aWins > topCount) {
+				topWinner = {[a]: aWins};
+				topCount = aWins;
+			}
+			if (aWins == topCount) {
+				topWinner[a] = aWins;
+			}
+			if (bWins > topCount) {
+				topWinner = {[b]: bWins};
+				topCount = bWins;
+			}
+			if (bWins == topCount) {
+				topWinner[b] = bWins;
+			}
+
+		}
+	}
+
+	console.log("Post-election tally:");
+	console.log(tally);
+
+	console.log("Top winner(s):");
+	console.log(topWinner);
+	console.log("Top count:");
+	console.log(topCount);
+
+
+	// If there was a tie, can we break it?
+	var keys = Object.keys(topWinner);
+
+	console.log("keys:");
+	console.log(keys);
+
+	if (keys.length > 1) {
+		a = keys[0];
+		b = keys[1];
+		aWins = tally[a][b];
+		bWins = tally[b][a];
+
+		console.log("Breaking tie:");
+		console.log(a + ": " + aWins);
+		console.log(b + ": " + bWins);
+
+		delete topWinner[(aWins>bWins) ? b : a];
+	}
+
+	console.log("topWinner:");
+	console.log(topWinner);
+
+	return {
+		finalWinner: Object.keys(topWinner)[0],
+		model: model,
+		text: text
+	};
+
+};
+
 function runIrv(model, options) {
+
+	var origBallots = model.getBallots();
 
 	var text = "";
 	text += "<span class='small'>";
 
-	var finalWinner = null;
+	var winners = [];
 	var roundNum = 1;
 
 	var candidates = [];
@@ -216,7 +355,7 @@ function runIrv(model, options) {
 		candidates.push(model.candidates[i].id);
 	}
 
-	while(!finalWinner){
+	while(candidates.length > 1){
 
 		text += "<b>round "+roundNum+":</b><br>";
 		text += "who's voters' #1 choice?<br>";
@@ -242,128 +381,83 @@ function runIrv(model, options) {
 		}
 		text += "<br>";
 
-		// Do they have more than 50%?
-		var winner = _countWinner(tally);
-		var ratio = tally[winner]/model.getTotalVoters();
-		if(ratio>=0.5){
-			finalWinner = winner;
-			text += _icon(winner)+" has more than 50%<br>";
-			break;
-		}
-
-		// Otherwise... runoff...
+		// Add the last place to the front of the winners list
 		var loser = _countLoser(tally);
-		text += "nobody's more than 50%. ";
-		text += "eliminate loser, "+_icon(loser)+". next round!<br><br>";
+		winners.unshift(loser);
+		text += "eliminate loser, "+_icon(loser);
+		if (candidates.length > 2) text += ". next round!";
+		text += "<br><br>";
 
 		// ACTUALLY ELIMINATE
 		candidates.splice(candidates.indexOf(loser), 1); // remove from candidates...
-		var ballots = model.getBallots();
-		for(var i=0; i<ballots.length; i++){
-			var rank = ballots[i].rank;
-			rank.splice(rank.indexOf(loser), 1); // REMOVE THE LOSER
-		}
+		// var ballots = model.getBallots();
+		// for(var i=0; i<ballots.length; i++){
+		// 	var rank = ballots[i].rank;
+		// 	rank.splice(rank.indexOf(loser), 1); // REMOVE THE LOSER
+		// }
 
 		// And repeat!
 		roundNum++;
 
 	}
 
+	winners.unshift(candidates[0]);
+	text += "winner, "+_icon(candidates[0])+"!<br><br>";
+
 	return {
 		text: text,
 		model: model,
-		finalWinner: finalWinner
+		winners: winners
 	}
-
 }
 
 Election.irv = function(model, options){
 
 	var results = runIrv(model, options);
+	var finalWinner = results.winners[0];
 
-	var color = _colorWinner(results.model, results.finalWinner);
+	var color = _colorWinner(results.model, finalWinner);
 	results.text += "</span>";
 	results.text += "<br>";
-	results.text += "<b style='color:"+color+"'>"+results.finalWinner.toUpperCase()+"</b> WINS";
+	results.text += "<b style='color:"+color+"'>"+finalWinner.toUpperCase()+"</b> WINS";
 	results.model.caption.innerHTML = results.text;
-
 };
 
 
 Election.powerIrv = function(model, options){
 
-	var text = "";
-	text += "<span class='small'>";
+	var results = runIrv(model, options);
 
-	var finalWinner = null;
-	var roundNum = 1;
-
-	var candidates = [];
-	for(var i=0; i<model.candidates.length; i++){
-		candidates.push(model.candidates[i].id);
-	}
-
-	while(!finalWinner){
-
-		text += "<b>round "+roundNum+":</b><br>";
-		text += "who's voters' #1 choice?<br>";
-
-		// Tally the approvals & get winner!
-		var pre_tally = _tally(model, function(tally, ballot){
-			var first = ballot.rank[0]; // just count #1
-			tally[first]++;
-		});
-
-		// ONLY tally the remaining candidates...
-		var tally = {};
-		for(var i=0; i<candidates.length; i++){
-			var cID = candidates[i];
-			tally[cID] = pre_tally[cID];
-		}
-
-		// Say 'em...
-		for(var i=0; i<candidates.length; i++){
-			var c = candidates[i];
-			text += _icon(c)+":"+tally[c];
-			if(i<candidates.length-1) text+=", ";
-		}
-		text += "<br>";
-
-		// Do they have more than 50%?
-		var winner = _countWinner(tally);
-		var ratio = tally[winner]/model.getTotalVoters();
-		if(ratio>=0.5){
-			finalWinner = winner;
-			text += _icon(winner)+" has more than 50%<br>";
-			break;
-		}
-
-		// Otherwise... runoff...
-		var loser = _countLoser(tally);
-		text += "nobody's more than 50%. ";
-		text += "eliminate loser, "+_icon(loser)+". next round!<br><br>";
-
-		// ACTUALLY ELIMINATE
-		candidates.splice(candidates.indexOf(loser), 1); // remove from candidates...
-		var ballots = model.getBallots();
-		for(var i=0; i<ballots.length; i++){
-			var rank = ballots[i].rank;
-			rank.splice(rank.indexOf(loser), 1); // REMOVE THE LOSER
-		}
-
-		// And repeat!
-		roundNum++;
-
-	}
-
-	// END!
-	var color = _colorWinner(model, finalWinner);
-	text += "</span>";
-	text += "<br>";
-	text += "<b style='color:"+color+"'>"+winner.toUpperCase()+"</b> WINS";
-	model.caption.innerHTML = text;
+	var ballots = model.getBallots();
+	console.log(ballots);
 
 
+	console.log("results / model:");
+	console.log(results);
+	console.log(model);
+
+	ballots = model.getBallots();
+	console.log(ballots);
+
+	// Run the final 3 pairwise elections
+	var winners = results.winners.slice(0, 3);
+
+	console.log("winners:");
+	console.log(winners);
+
+	var results = powerIrvCondorcet(model, options, winners);
+	var finalWinner = results.finalWinner;
+
+	console.log(finalWinner);
+
+	ballots = model.getBallots();
+	console.log(ballots);
+
+	var color = _colorWinner(results.model, finalWinner);
+	results.text += "</span>";
+	results.text += "<br>";
+	results.text += "<b style='color:"+color+"'>"+finalWinner.toUpperCase()+"</b> WINS";
+	results.model.caption.innerHTML = results.text;
 };
 
 Election.plurality = function(model, options){

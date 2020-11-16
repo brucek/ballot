@@ -169,6 +169,8 @@ function RankedVoter(model){
 			return d1-d2;
 
 		});
+
+		console.log(JSON.stringify(rank));
 		
 		// Ballot!
 		return { rank:rank };
