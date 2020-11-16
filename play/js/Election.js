@@ -209,36 +209,21 @@ function powerIrvCondorcet(model, options, candidates=[]){
 	text += "<span class='small'>";
 	text += "<b>who wins each one-on-one?</b><br>";
 
-	var ballots = model.getBallots();
-
-	console.log(ballots);
-	console.log(candidates);
-	console.log(model.candidatesById);
-
 	// Create the WIN tally
 	var tally = {};
 	if (!candidates) candidates = Object.keys(model.candidatesById);
 
-	console.log(candidates);
-
 	for(var candidateID of candidates) {
 		tally[candidateID] = {};
 		for(var opponentID of candidates) {
-			console.log("Setting " + candidateID + " and " + opponentID);
-			console.log(tally);
 			if (candidateID == opponentID) continue;
 			tally[candidateID][opponentID] = 0;
 		}
 	}
 
-	console.log("Tally setup:");
-	console.log(tally);
-
 	var topCount = 0;
 	var topWinner = {};
-
-	console.log("Ballots:");
-	console.log(ballots);
+	var ballots = model.getBallots();
 
 	// For each combination... who's the better ranking?
 	for(var i=0; i<candidates.length-1; i++){
@@ -246,11 +231,10 @@ function powerIrvCondorcet(model, options, candidates=[]){
 		for(var j=i+1; j<candidates.length; j++){
 			var b = candidates[j];
 
-			// Actually figure out who won.
+			// Actually figure out who won in the pair.
 			var aWins = 0;
 			var bWins = 0;
 			for(var k=0; k<ballots.length; k++){
-				console.log(JSON.stringify(ballots[k]));
 				var rank = ballots[k].rank;
 				if(rank.indexOf(a)<rank.indexOf(b)){
 					aWins++; // a wins!
@@ -260,27 +244,26 @@ function powerIrvCondorcet(model, options, candidates=[]){
 			}
 
 			// Set the tallys
-
-			console.log("Setting tally:");
-			console.log("[" + a + "][" + b + "]: " + aWins);
-			console.log("[" + b + "][" + a + "]: " + bWins);
-
 			tally[a][b] = aWins;
 			tally[b][a] = bWins;
 
 			// WINNER?
-			var winner = (aWins>bWins) ? a : b;
+			if (aWins==bWins) {
+				text += _icon(a) + " vs " + _icon(b) + ": tied at " + aWins + "<br>";
+			} else {
+				var winner = (aWins > bWins) ? a : b;
 
-			// Text.
-			var by,to;
-			if(winner==a){
-				by = aWins;
-				to = bWins;
-			}else{
-				by = bWins;
-				to = aWins;
+				// Text.
+				var by, to;
+				if (winner == a) {
+					by = aWins;
+					to = bWins;
+				} else {
+					by = bWins;
+					to = aWins;
+				}
+				text += _icon(a) + " vs " + _icon(b) + ": " + _icon(winner) + " wins by " + by + " to " + to + "<br>";
 			}
-			text += _icon(a)+" vs "+_icon(b)+": "+_icon(winner)+" wins by "+by+" to "+to+"<br>";
 
 			// New top winner (or tie)?
 			if (aWins > topCount) {
@@ -301,39 +284,39 @@ function powerIrvCondorcet(model, options, candidates=[]){
 		}
 	}
 
-	console.log("Post-election tally:");
-	console.log(tally);
-
-	console.log("Top winner(s):");
-	console.log(topWinner);
-	console.log("Top count:");
-	console.log(topCount);
-
-
-	// If there was a tie, can we break it?
-	var keys = Object.keys(topWinner);
-
-	console.log("keys:");
-	console.log(keys);
-
-	if (keys.length > 1) {
-		a = keys[0];
-		b = keys[1];
-		aWins = tally[a][b];
-		bWins = tally[b][a];
-
-		console.log("Breaking tie:");
-		console.log(a + ": " + aWins);
-		console.log(b + ": " + bWins);
-
-		delete topWinner[(aWins>bWins) ? b : a];
+	// See if we have a Condorcet winner
+	var winCounts = {};
+	var winners = [];
+	for(var candidateID of candidates) {
+		winCounts[candidateID] = 0;
+		for(var opponentID of candidates) {
+			if (candidateID == opponentID) continue;
+			if (tally[candidateID][opponentID] > tally[opponentID][candidateID]) winCounts[candidateID]++;
+			if (winCounts[candidateID] == 2) winners.push(candidateID);
+		}
 	}
 
-	console.log("topWinner:");
-	console.log(topWinner);
+	if (winners.length === 0) {
+		// If there was a tie, can we break it?
+		var keys = Object.keys(topWinner);
+
+		if (keys.length === 2) {
+			a = keys[0];
+			b = keys[1];
+
+			aWins = tally[a][b];
+			bWins = tally[b][a];
+
+			winners = [(aWins > bWins) ? b : a];
+		} else if (keys.length === 1) {
+			winners = [keys[0]];
+		} else if (keys.length === 3) {
+			winners = [keys[0]];
+		}
+	}
 
 	return {
-		finalWinner: Object.keys(topWinner)[0],
+		finalWinner: winners[0],
 		model: model,
 		text: text
 	};
@@ -428,30 +411,11 @@ Election.powerIrv = function(model, options){
 
 	var results = runIrv(model, options);
 
-	var ballots = model.getBallots();
-	console.log(ballots);
-
-
-	console.log("results / model:");
-	console.log(results);
-	console.log(model);
-
-	ballots = model.getBallots();
-	console.log(ballots);
-
 	// Run the final 3 pairwise elections
 	var winners = results.winners.slice(0, 3);
 
-	console.log("winners:");
-	console.log(winners);
-
 	var results = powerIrvCondorcet(model, options, winners);
 	var finalWinner = results.finalWinner;
-
-	console.log(finalWinner);
-
-	ballots = model.getBallots();
-	console.log(ballots);
 
 	var color = _colorWinner(results.model, finalWinner);
 	results.text += "</span>";
@@ -554,6 +518,12 @@ var _countLoser = function(tally){
 }
 
 var _colorWinner = function(model, winner){
+	if (Candidate.graphics[winner] === undefined) {
+		console.log(winner);
+		console.log(model);
+		console.log(Candidate.graphics);
+	}
+
 	var color = (winner) ? Candidate.graphics[winner].fill : "";
 	model.canvas.style.borderColor = color;
 	return color;
