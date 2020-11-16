@@ -308,15 +308,14 @@ function powerIrvCondorcet(model, options, candidates=[]){
 			bWins = tally[b][a];
 
 			winners = [(aWins > bWins) ? b : a];
-		} else if (keys.length === 1) {
-			winners = [keys[0]];
-		} else if (keys.length === 3) {
+		} else if (keys.length > 0) {
 			winners = [keys[0]];
 		}
 	}
 
 	return {
-		finalWinner: winners[0],
+		winners: winners,
+		topCount: topCount,
 		model: model,
 		text: text
 	};
@@ -370,7 +369,7 @@ function runIrv(model, options) {
 
 		// Add the last place to the front of the winners list
 		var loser = _countLoser(tally);
-		winners.unshift(loser);
+		winners.unshift([loser, tally[loser]]);
 		text += "eliminate loser, "+_icon(loser);
 		if (candidates.length > 2) text += ". next round!";
 		text += "<br><br>";
@@ -388,10 +387,8 @@ function runIrv(model, options) {
 
 	}
 
-	winners.unshift(candidates[0]);
-	text += "winner, "+_icon(candidates[0])+"!<br><br>";
-
-
+	var finalWinner = candidates[0];
+	winners.unshift([finalWinner, tally[finalWinner]]);
 
 	return {
 		text: text,
@@ -403,12 +400,31 @@ function runIrv(model, options) {
 Election.irv = function(model, options){
 
 	var results = runIrv(model, options);
-	var finalWinner = results.winners[0];
+	var finalWinners = results.winners;
 
-	var color = _colorWinner(results.model, finalWinner);
-	results.text += "</span>";
-	results.text += "<br>";
-	results.text += "<b style='color:"+color+"'>"+finalWinner.toUpperCase()+"</b> WINS";
+	for (var i=0; i < finalWinners.length; i++) {
+		if (finalWinners[i][1] > finalWinners[i+1][1]) {
+			finalWinners = finalWinners.splice(0,i+1);
+			break;
+		}
+	}
+
+	if (finalWinners.length == 1) {
+		var finalWinner = finalWinners[0][0];
+		var color = _colorWinner(results.model, finalWinner);
+		results.text += "</span>";
+		results.text += "<br>";
+		results.text += "<b style='color:" + color + "'>" + finalWinner.toUpperCase() + "</b> WINS";
+	} else {
+		results.text += "</span>";
+		var winName;
+		for (var winner of finalWinners) {
+			winName = winner[0];
+			var color = _colorWinner(results.model, winName);
+			results.text += "<b style='color:" + color + "'>" + winName.toUpperCase() + "</b> ";
+		}
+		results.text += " TIES";
+	}
 	results.model.caption.innerHTML = results.text;
 };
 
@@ -418,15 +434,24 @@ Election.powerIrv = function(model, options){
 	var results = runIrv(model, options);
 
 	// Run the final 3 pairwise elections
-	var winners = results.winners.slice(0, 3);
+	var winners = results.winners.slice(0, 3).map(item => item[0]);
 
 	var results = powerIrvCondorcet(model, options, winners);
-	var finalWinner = results.finalWinner;
 
-	var color = _colorWinner(results.model, finalWinner);
-	results.text += "</span>";
-	results.text += "<br>";
-	results.text += "<b style='color:"+color+"'>"+finalWinner.toUpperCase()+"</b> WINS";
+	if (results.winners.length == 1) {
+		var finalWinner = results.winners[0];
+		var color = _colorWinner(results.model, finalWinner);
+		results.text += "</span>";
+		results.text += "<br>";
+		results.text += "<b style='color:" + color + "'>" + finalWinner.toUpperCase() + "</b> WINS";
+	} else {
+		results.text += "</span>";
+		for (var winner of results.winners) {
+			var color = _colorWinner(results.model, winner);
+			results.text += "<b style='color:" + color + "'>" + winner.toUpperCase() + "</b> ";
+		}
+		results.text += " TIES";
+	}
 	results.model.caption.innerHTML = results.text;
 };
 
@@ -479,7 +504,7 @@ var _tally = function(model, tallyFunc){
 	for(var i=0; i<ballots.length; i++){
 		tallyFunc(tally, ballots[i]);
 	}
-	
+
 	// Return it.
 	return tally;
 
