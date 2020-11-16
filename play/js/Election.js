@@ -325,8 +325,6 @@ function powerIrvCondorcet(model, options, candidates=[]){
 
 function runIrv(model, options) {
 
-	var origBallots = model.getBallots();
-
 	var text = "";
 	text += "<span class='small'>";
 
@@ -345,8 +343,14 @@ function runIrv(model, options) {
 
 		// Tally the approvals & get winner!
 		var pre_tally = _tally(model, function(tally, ballot){
-			var first = ballot.rank[0]; // just count #1
-			tally[first]++;
+			var first;
+			for(var i=0; i<candidates.length; i++){
+				if (candidates.indexOf(ballot.rank[i]) >= 0) {
+					first = ballot.rank[i];
+					break;
+				}
+			}
+			if (first) tally[first]++;
 		});
 
 		// ONLY tally the remaining candidates...
@@ -386,6 +390,8 @@ function runIrv(model, options) {
 
 	winners.unshift(candidates[0]);
 	text += "winner, "+_icon(candidates[0])+"!<br><br>";
+
+
 
 	return {
 		text: text,
